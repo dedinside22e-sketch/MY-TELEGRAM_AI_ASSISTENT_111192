@@ -12,7 +12,7 @@ API_ID = 31142475
 API_HASH = "e60aa6d8df5a460f460a72479f80339e"
 
 # ВАШ НОВЫЙ КЛЮЧ OPENAI
-OPENAI_API_KEY = "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"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Фейковый сервер для Render
 app = Flask('')
