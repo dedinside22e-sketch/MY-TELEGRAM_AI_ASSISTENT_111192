@@ -12,7 +12,7 @@ from openai import OpenAI
 API_ID = 31142475
 API_HASH = "e60aa6d8df5a460f460a72479f80339e"
 # Берем токен из облака или используем твой по умолчанию
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "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")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "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")
 
 # ФЕЙКОВЫЙ СЕРВЕР ДЛЯ БЕСПЛАТНОГО RENDER
 app = Flask('')
