@@ -2,65 +2,71 @@ import asyncio
 import os
 import qrcode
 import time
+from flask import Flask
+from threading import Thread
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from openai import OpenAI
 
-# ========= НАСТРОЙКИ (БЕРИ ИЗ ПЕРЕМЕННЫХ ИЛИ ПИШИ ТУТ) =========
+# ========= НАСТРОЙКИ =========
 API_ID = 31142475
 API_HASH = "e60aa6d8df5a460f460a72479f80339e"
+# Берем токен из облака или используем твой по умолчанию
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "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")
 
-# БЕЛЫЙ СПИСОК С РОЛЯМИ
+# ФЕЙКОВЫЙ СЕРВЕР ДЛЯ БЕСПЛАТНОГО RENDER
+app = Flask('')
+
+
+@app.route('/')
+def home(): return "Бот Шах онлайн!"
+
+
+def run_flask():
+    # Render дает порт 10000 по умолчанию
+    app.run(host='0.0.0.0', port=10000)
+
+
 VIP_CONFIG = {
-    "Sadyk1234": {"name": "Акаля", "relation": "брат", "style": "на ВЫ, 'Ассалому алейкум Акаля'"},
+    "Sadyk1234": {"name": "Акаля", "relation": "старший брат", "style": "на ВЫ, 'Ассалому алейкум Акаля'"},
     "Yakuzatop": {"name": "Париса", "relation": "сестра", "style": "на ты, называй Париса"},
     "996509013433": {"name": "Ача", "relation": "бабушка", "style": "на ВЫ, 'Ассалому алейкум Ача'"},
     "79031331872": {"name": "Сайера Хола", "relation": "тетя", "style": "на ВЫ, 'Ассалому алейкум Сайера Хола'"},
-    "Nurmetov_Shahrier": {"name": "Мама", "relation": "мама", "style": "на ВЫ, 'мама/мааам'"}
+    "Nurmetov_Shahrier": {"name": "Мама", "relation": "мама", "style": "на ВЫ, называй 'мама' или 'мааам'"}
 }
 
 TARGET_GROUP_ID = -1003883560965
-
 client_ai = OpenAI(base_url="https://models.inference.ai.azure.com", api_key=GITHUB_TOKEN)
 
 
 class UserBot:
     def __init__(self):
-        # Если есть переменная окружения (для облака), берем её. Иначе ищем файл.
-        env_session = os.getenv("TELEGRAM_SESSION")
-        if env_session:
-            self.session_str = env_session
-        elif os.path.exists("session.txt"):
-            with open("session.txt", "r") as f:
-                self.session_str = f.read().strip()
-        else:
-            self.session_str = ""
+        # Приоритет переменной из облака, если нет - ищем файл
+        session_str = os.getenv("TELEGRAM_SESSION", "")
+        if not session_str and os.path.exists("session.txt"):
+            session_str = open("session.txt").read().strip()
 
-        self.client = TelegramClient(StringSession(self.session_str), API_ID, API_HASH)
+        self.client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
         self.queue = asyncio.Queue()
         self.last_money_request = 0
         self.last_greet_time = {}
 
     async def get_ai_reply(self, text, user_id, vip_info=None):
         current_time = time.time()
-        # Проверка приветствия (раз в 12 часов)
         should_greet = current_time - self.last_greet_time.get(user_id, 0) > 43200
-        if should_greet:
-            self.last_greet_time[user_id] = current_time
+        if should_greet: self.last_greet_time[user_id] = current_time
 
         ask_money = ""
         if vip_info and vip_info['relation'] == "мама":
-            if current_time - self.last_money_request > 3600:
+            if current_time - self.last_money_request > 10800:
                 ask_money = " В конце добавь: 'мааам, скинь 50 сом на баланс пожалуйста'."
                 self.last_money_request = current_time
 
         if vip_info:
-            greet_instr = f"Здоровайся: {vip_info['style']}." if should_greet else "Не здоровайся снова."
-            system_msg = (f"Ты Шах. Пишешь {vip_info['name']}. СТИЛЬ: {vip_info['style']}. "
-                          f"Вежливо, на ВЫ (кроме сестры). {greet_instr}{ask_money}")
+            greet_instr = f"Здоровайся: {vip_info['style']}." if should_greet else "Не здоровайся."
+            system_msg = f"Ты Шах. Пишешь {vip_info['name']}. {vip_info['style']}. Вежливо. {greet_instr}{ask_money}"
         else:
-            system_msg = "Ты Шах, пацан с района. Маты для связки, всё мелко, дерзко."
+            system_msg = "Ты Шах, пацан с района. Дерзко, мелко, маты для связки."
 
         try:
             response = await asyncio.to_thread(
@@ -71,40 +77,28 @@ class UserBot:
             return response.choices[0].message.content.strip()
         except Exception as e:
             if "429" in str(e): return "бля, лимиты 150/день всё."
-            return f"ошибка ИИ: {e}"
+            return f"ошибка: {e}"
 
     async def handle(self, event):
         sender = await event.get_sender()
         if not sender: return
-
-        username = getattr(sender, 'username', '')
-        phone = getattr(sender, 'phone', '')
-        vip_info = VIP_CONFIG.get(username) or VIP_CONFIG.get(phone)
-
-        await self.client.send_read_acknowledge(event.chat_id, event.message)
+        vip_info = VIP_CONFIG.get(getattr(sender, 'username', '')) or VIP_CONFIG.get(getattr(sender, 'phone', ''))
 
         async with self.client.action(event.chat_id, 'typing'):
             reply = await self.get_ai_reply(event.message.text or "", sender.id, vip_info)
-            print(f"🤖 ОТВЕТ: {reply}")
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
             await event.reply(reply if vip_info else reply.lower())
 
     async def start(self):
         await self.client.connect()
         if not await self.client.is_user_authorized():
-            print("\n--- НУЖНА АВТОРИЗАЦИЯ ---")
             qr_login = await self.client.qr_login()
             qr = qrcode.QRCode()
             qr.add_data(qr_login.url)
             qr.print_ascii(invert=True)
-            print("\nОтсканируй QR в Telegram!")
+            print("ОТСКАНИРУЙ QR В TELEGRAM!")
             await qr_login.wait()
-            # Сохраняем для будущего использования
-            with open("session.txt", "w") as f:
-                f.write(self.client.session.save())
-
-        print(f"\n--- ШАХ В СЕТИ ---")
-        print(f"ТВОЯ СЕССИЯ ДЛЯ ОБЛАКА (СКОПИРУЙ): {self.client.session.save()}")
+            print(f"ТВОЯ СЕССИЯ: {self.client.session.save()}")
 
         @self.client.on(events.NewMessage(incoming=True))
         async def handler(event):
@@ -115,11 +109,14 @@ class UserBot:
             ev = await self.queue.get()
             try:
                 await self.handle(ev)
-            except Exception as e:
-                print(f"Ошибка: {e}")
+            except:
+                pass
             finally:
                 self.queue.task_done()
 
 
 if __name__ == "__main__":
+    # Запускаем Flask для Render в фоне
+    Thread(target=run_flask).start()
+    # Запускаем бота
     asyncio.run(UserBot().start())
