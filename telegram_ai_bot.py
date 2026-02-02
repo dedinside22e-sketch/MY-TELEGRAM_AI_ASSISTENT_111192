@@ -8,12 +8,15 @@ from telethon.sessions import StringSession
 from openai import OpenAI
 
 # ========= НАСТРОЙКИ =========
+# ========= НАСТРОЙКИ =========
 API_ID = 31142475
 API_HASH = "e60aa6d8df5a460f460a72479f80339e"
 
-# ВАШ НОВЫЙ КЛЮЧ OPENAI
-OPENAI_API_KEY = os.getenv("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")
+# Пробуем взять ключ из системы, если нет - берем из текста
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "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")
 
+# Подключаемся строго без лишних ссылок
+client_ai = OpenAI(api_key=OPENAI_API_KEY)
 # Фейковый сервер для Render
 app = Flask('')
 
