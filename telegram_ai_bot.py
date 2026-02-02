@@ -8,13 +8,13 @@ from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from openai import OpenAI
 
-# ========= НАСТРОЙКИ =========
+# ========= НАСТРОЙКИ (Берем из облака) =========
 API_ID = 31142475
 API_HASH = "e60aa6d8df5a460f460a72479f80339e"
-# Берем токен из облака или используем твой по умолчанию
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "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")
+# Токен GitHub
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "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")
 
-# ФЕЙКОВЫЙ СЕРВЕР ДЛЯ БЕСПЛАТНОГО RENDER
+# Фейковый сервер для Render
 app = Flask('')
 
 
@@ -23,16 +23,15 @@ def home(): return "Бот Шах онлайн!"
 
 
 def run_flask():
-    # Render дает порт 10000 по умолчанию
     app.run(host='0.0.0.0', port=10000)
 
 
 VIP_CONFIG = {
-    "Sadyk1234": {"name": "Акаля", "relation": "старший брат", "style": "на ВЫ, 'Ассалому алейкум Акаля'"},
+    "Sadyk1234": {"name": "Акаля", "relation": "брат", "style": "на ВЫ, 'Ассалому алейкум Акаля'"},
     "Yakuzatop": {"name": "Париса", "relation": "сестра", "style": "на ты, называй Париса"},
     "996509013433": {"name": "Ача", "relation": "бабушка", "style": "на ВЫ, 'Ассалому алейкум Ача'"},
     "79031331872": {"name": "Сайера Хола", "relation": "тетя", "style": "на ВЫ, 'Ассалому алейкум Сайера Хола'"},
-    "Nurmetov_Shahrier": {"name": "Мама", "relation": "мама", "style": "на ВЫ, называй 'мама' или 'мааам'"}
+    "Nurmetov_Shahrier": {"name": "Мама", "relation": "мама", "style": "на ВЫ, 'мааам'"}
 }
 
 TARGET_GROUP_ID = -1003883560965
@@ -41,12 +40,9 @@ client_ai = OpenAI(base_url="https://models.inference.ai.azure.com", api_key=GIT
 
 class UserBot:
     def __init__(self):
-        # Приоритет переменной из облака, если нет - ищем файл
-        session_str = os.getenv("TELEGRAM_SESSION", "")
-        if not session_str and os.path.exists("session.txt"):
-            session_str = open("session.txt").read().strip()
-
-        self.client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
+        # Ищем сессию в переменных окружения
+        self.session_str = os.getenv("TELEGRAM_SESSION", "")
+        self.client = TelegramClient(StringSession(self.session_str), API_ID, API_HASH)
         self.queue = asyncio.Queue()
         self.last_money_request = 0
         self.last_greet_time = {}
@@ -76,8 +72,8 @@ class UserBot:
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            if "429" in str(e): return "бля, лимиты 150/день всё."
-            return f"ошибка: {e}"
+            if "429" in str(e): return "Лимиты 150/день исчерпаны."
+            return f"ошибка ИИ: {e}"
 
     async def handle(self, event):
         sender = await event.get_sender()
@@ -92,13 +88,14 @@ class UserBot:
     async def start(self):
         await self.client.connect()
         if not await self.client.is_user_authorized():
-            qr_login = await self.client.qr_login()
-            qr = qrcode.QRCode()
-            qr.add_data(qr_login.url)
-            qr.print_ascii(invert=True)
-            print("ОТСКАНИРУЙ QR В TELEGRAM!")
-            await qr_login.wait()
-            print(f"ТВОЯ СЕССИЯ: {self.client.session.save()}")
+            # Если сессии нет, бот попросит войти прямо в консоли
+            print("--- СЕССИЯ НЕ НАЙДЕНА. ВХОДИМ... ---")
+            await self.client.start()
+            print("\n--- СКОПИРУЙ ЭТУ СТРОКУ И ВСТАВЬ В RENDER (TELEGRAM_SESSION) ---")
+            print(self.client.session.save())
+            print("--- КОНЕЦ СТРОКИ ---\n")
+
+        print("\n--- БОТ ШАХ В СЕТИ ---")
 
         @self.client.on(events.NewMessage(incoming=True))
         async def handler(event):
@@ -116,7 +113,5 @@ class UserBot:
 
 
 if __name__ == "__main__":
-    # Запускаем Flask для Render в фоне
-    Thread(target=run_flask).start()
-    # Запускаем бота
+    Thread(target=run_flask, daemon=True).start()
     asyncio.run(UserBot().start())
