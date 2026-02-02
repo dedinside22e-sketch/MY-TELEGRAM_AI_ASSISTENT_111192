@@ -1,6 +1,5 @@
 import asyncio
 import os
-import qrcode
 import time
 from flask import Flask
 from threading import Thread
@@ -8,23 +7,21 @@ from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from openai import OpenAI
 
-# ========= НАСТРОЙКИ (Берем из облака) =========
+# ========= НАСТРОЙКИ =========
 API_ID = 31142475
 API_HASH = "e60aa6d8df5a460f460a72479f80339e"
-# Токен GitHub
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "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")
+
+# ВАШ НОВЫЙ КЛЮЧ OPENAI
+OPENAI_API_KEY = "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"
 
 # Фейковый сервер для Render
 app = Flask('')
 
-
 @app.route('/')
 def home(): return "Бот Шах онлайн!"
 
-
 def run_flask():
     app.run(host='0.0.0.0', port=10000)
-
 
 VIP_CONFIG = {
     "Sadyk1234": {"name": "Акаля", "relation": "брат", "style": "на ВЫ, 'Ассалому алейкум Акаля'"},
@@ -35,7 +32,9 @@ VIP_CONFIG = {
 }
 
 TARGET_GROUP_ID = -1003883560965
-client_ai = OpenAI(base_url="https://models.inference.ai.azure.com", api_key=GITHUB_TOKEN)
+
+# Подключаемся к официальному API OpenAI с новым ключом
+client_ai = OpenAI(api_key=OPENAI_API_KEY)
 
 
 class UserBot:
@@ -72,7 +71,8 @@ class UserBot:
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            if "429" in str(e): return "Лимиты 150/день исчерпаны."
+            # Ошибка 429 у OpenAI часто означает окончание денег на счету
+            if "429" in str(e): return "Лимиты OpenAI исчерпаны или нет денег."
             return f"ошибка ИИ: {e}"
 
     async def handle(self, event):
@@ -88,7 +88,6 @@ class UserBot:
     async def start(self):
         await self.client.connect()
         if not await self.client.is_user_authorized():
-            # Если сессии нет, бот попросит войти прямо в консоли
             print("--- СЕССИЯ НЕ НАЙДЕНА. ВХОДИМ... ---")
             await self.client.start()
             print("\n--- СКОПИРУЙ ЭТУ СТРОКУ И ВСТАВЬ В RENDER (TELEGRAM_SESSION) ---")
